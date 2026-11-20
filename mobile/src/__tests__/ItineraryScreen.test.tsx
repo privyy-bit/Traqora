@@ -24,4 +24,3 @@ describe('ItineraryScreen Time-Zone Display', () => {
     expect(getByTestId('arrival-time').props.children).toBe('20:00 (GMT)');
   });
 });
-export {};

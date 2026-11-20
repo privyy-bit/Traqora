@@ -1,40 +1,4 @@
-use airline::{
-    AirlineContract, AirlineContractClient, BatchCreateFlightsResult,
-    BatchUpdateFlightStatusResult, Flight, FlightInput, FlightStatusUpdate,
-};
-use soroban_sdk::{testutils::Address as _, Address, Env, Symbol, Vec};
 
-use integration_tests::{
-    generate_actors, new_env, register_and_verify_airline, register_contracts,
-};
-
-
-
-#[test]
-fn test_cancel_flight_and_unauthorized_changes() {
-    let env = new_env();
-    let actors = generate_actors(&env);
-    let contracts = register_contracts(&env);
-    contracts.airline.initialize(&actors.admin);
-    register_and_verify_airline(&env, &contracts.airline, &actors.admin, &actors.airline);
-
-    let flight_id = contracts.airline.create_flight(
-        &actors.airline,
-        &Symbol::new(&env, "TQ202"),
-        &Symbol::new(&env, "SFO"),
-        &Symbol::new(&env, "SEA"),
-        &1_800_000_000,
-        &1_800_050_000,
-        &100,
-        &150_0000000i128,
-        &Symbol::new(&env, "USDC"),
-    );
-
-    // Cancel flight
-    contracts.airline.cancel_flight(&actors.airline, &flight_id);
-    let flight = contracts.airline.get_flight(&flight_id).unwrap();
-    assert_eq!(flight.status, Symbol::new(&env, "cancelled"));
-}
 #[test]
 fn test_register_and_verify_airline() {
     let env = new_env();
@@ -228,6 +192,32 @@ fn test_cancel_flight_pending_and_final() {
     contracts.airline.cancel_flight(&actors.airline, &flight_id);
     let flight2 = contracts.airline.get_flight(&flight_id).unwrap();
     assert_eq!(flight2.status, Symbol::new(&env, "cancelled"));
+}
+
+#[test]
+fn test_cancel_flight_and_unauthorized_changes() {
+    let env = new_env();
+    let actors = generate_actors(&env);
+    let contracts = register_contracts(&env);
+    contracts.airline.initialize(&actors.admin);
+    register_and_verify_airline(&env, &contracts.airline, &actors.admin, &actors.airline);
+
+    let flight_id = contracts.airline.create_flight(
+        &actors.airline,
+        &Symbol::new(&env, "TQ202"),
+        &Symbol::new(&env, "SFO"),
+        &Symbol::new(&env, "SEA"),
+        &1_800_000_000,
+        &1_800_050_000,
+        &100,
+        &150_0000000i128,
+        &Symbol::new(&env, "USDC"),
+    );
+
+    // Cancel flight
+    contracts.airline.cancel_flight(&actors.airline, &flight_id);
+    let flight = contracts.airline.get_flight(&flight_id).unwrap();
+    assert_eq!(flight.status, Symbol::new(&env, "cancelled"));
 }
 
 #[test]
