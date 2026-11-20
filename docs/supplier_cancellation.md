@@ -9,3 +9,7 @@ V1 supplier cancellation implements safe two-step state handling to prevent ambi
 
 ## Authorization
 Only the registered and verified airline address authorized for the specific flight may invoke `cancel_flight`.
+
+## Events Emitted
+- `Domain::Flight`, `Action::Status` (when transitioning to pending)
+- `Domain::Flight`, `Action::Cancelled` (when transitioning to cancelled)

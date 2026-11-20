@@ -1,4 +1,3 @@
-use soroban_sdk::{Env, Symbol};
 use soroban_sdk::{testutils::Address as _, Address, Env, Symbol, Vec};
 
 #[test]
