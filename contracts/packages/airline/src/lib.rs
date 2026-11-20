@@ -461,18 +461,33 @@ impl AirlineContract {
         }
     }
 
-    // Cancel flight (airline emergency)
-    pub fn cancel_flight(env: Env, airline: Address, flight_id: u64) {
+    // Cancel flight (airline emergency) with safe pending state handling
+    pub fn cancel_flight(env: Env, airline: Address, flight_id: u64) -> Symbol {
         airline.require_auth();
 
         let mut flight = AirlineRegistry::get_flight(&env, flight_id).expect("Flight not found");
 
         assert!(flight.airline == airline, "Unauthorized");
 
+        if flight.status == symbol_short!("pending") {
+        flight.status = symbol_short!("cancelled");
+        AirlineRegistry::set_flight(&env, flight_id, &flight);
+            contract_events::emit(&env, Domain::Flight, Action::Cancelled, flight_id);
+            return symbol_short!("cancelled");
+        }
+
+        if flight.status == symbol_short!("active") {
+            flight.status = symbol_short!("pending");
+            AirlineRegistry::set_flight(&env, flight_id, &flight);
+            contract_events::emit(&env, Domain::Flight, Action::Status, flight_id);
+            return symbol_short!("pending");
+        }
+
         flight.status = symbol_short!("cancelled");
         AirlineRegistry::set_flight(&env, flight_id, &flight);
 
         contract_events::emit(&env, Domain::Flight, Action::Cancelled, flight_id);
+        symbol_short!("cancelled")
     }
 
     // Batch create flights with per-item validation and partial failure handling.

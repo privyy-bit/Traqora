@@ -1,12 +1,63 @@
-use airline::{
-    AirlineContract, AirlineContractClient, BatchCreateFlightsResult,
-    BatchUpdateFlightStatusResult, Flight, FlightInput, FlightStatusUpdate,
-};
+use soroban_sdk::{Env, Symbol};
 use soroban_sdk::{testutils::Address as _, Address, Env, Symbol, Vec};
 
-use integration_tests::{
-    generate_actors, new_env, register_and_verify_airline, register_contracts,
-};
+#[test]
+fn test_supplier_cancellation_ambiguous_state() {
+    let env = new_env();
+    let actors = generate_actors(&env);
+    let contracts = register_contracts(&env);
+    contracts.airline.initialize(&actors.admin);
+    register_and_verify_airline(&env, &contracts.airline, &actors.admin, &actors.airline);
+
+    let flight_id = contracts.airline.create_flight(
+        &actors.airline,
+        &Symbol::new(&env, "TQ303"),
+        &Symbol::new(&env, "JFK"),
+        &Symbol::new(&env, "LAX"),
+        &1_800_000_000,
+        &1_800_100_000,
+        &100,
+        &200_0000000i128,
+        &Symbol::new(&env, "USDC"),
+    );
+
+    // First cancellation call on active flight moves it to pending state
+    let status_res1 = contracts.airline.cancel_flight(&actors.airline, &flight_id);
+    assert_eq!(status_res1, Symbol::new(&env, "pending"));
+    let flight_pending = contracts.airline.get_flight(&flight_id).unwrap();
+    assert_eq!(flight_pending.status, Symbol::new(&env, "pending"));
+
+    // Second cancellation call on pending flight completes the cancellation
+    let status_res2 = contracts.airline.cancel_flight(&actors.airline, &flight_id);
+    assert_eq!(status_res2, Symbol::new(&env, "cancelled"));
+    let flight_cancelled = contracts.airline.get_flight(&flight_id).unwrap();
+    assert_eq!(flight_cancelled.status, Symbol::new(&env, "cancelled"));
+}
+
+#[test]
+#[should_panic(expected = "Unauthorized")]
+fn test_cancel_flight_unauthorized() {
+    let env = new_env();
+    let actors = generate_actors(&env);
+    let contracts = register_contracts(&env);
+    contracts.airline.initialize(&actors.admin);
+    register_and_verify_airline(&env, &contracts.airline, &actors.admin, &actors.airline);
+
+    let flight_id = contracts.airline.create_flight(
+        &actors.airline,
+        &Symbol::new(&env, "TQ304"),
+        &Symbol::new(&env, "JFK"),
+        &Symbol::new(&env, "LAX"),
+        &1_800_000_000,
+        &1_800_100_000,
+        &100,
+        &200_0000000i128,
+        &Symbol::new(&env, "USDC"),
+    );
+
+    contracts.airline.cancel_flight(&actors.passenger, &flight_id);
+}
+
 
 #[test]
 fn test_register_and_verify_airline() {
