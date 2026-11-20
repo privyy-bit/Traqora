@@ -10,6 +10,10 @@ interface ItinerarySegment {
   bookingReference?: string | null;
   /** True when this segment begins a self-transfer (separate-ticket) connection. */
   separateTicket?: boolean;
+  /** Preferred update channels for this booking */
+  notificationChannels?: string[];
+  /** Essential service notices override opt-out */
+  essentialNoticesOptOut?: boolean;
   /** IANA time zone of the departure airport. */
   departureTimeZone?: string;
   /** IANA time zone of the arrival airport. */
@@ -36,6 +40,10 @@ interface BookingConfirmationProps {
   onViewDashboard?: () => void;
   /** Optional human-readable separate-ticket risk explanation. */
   selfTransferExplanation?: string;
+  /** Supported booking update channels (e.g. push, email, sms) */
+  notificationChannels?: string[];
+  /** Callback when notification preferences are updated */
+  onUpdateNotificationChannels?: (channels: string[]) => void;
 }
 
 export default function BookingConfirmationScreen({
@@ -46,8 +54,19 @@ export default function BookingConfirmationScreen({
   transactionHash,
   onViewDashboard,
   selfTransferExplanation,
+  notificationChannels = ['push', 'email'],
+  onUpdateNotificationChannels,
 }: BookingConfirmationProps) {
   const hasSelfTransfer = itinerary.some((seg) => seg.separateTicket === true);
+  const [channels, setChannels] = React.useState<string[]>(notificationChannels);
+
+  const toggleChannel = (ch: string) => {
+    const updated = channels.includes(ch)
+      ? channels.filter((c) => c !== ch)
+      : [...channels, ch];
+    setChannels(updated);
+    onUpdateNotificationChannels?.(updated);
+  };
 
   return (
     <div className="booking-confirmation-container">
@@ -116,6 +135,28 @@ export default function BookingConfirmationScreen({
               </p>
             </div>
           )}
+        </div>
+
+        <div className="card">
+          <h2 className="section-title">Itinerary Update Notification Preferences</h2>
+          <p className="notice-text">
+            Choose your preferred channels for flight and booking updates. Essential safety and regulatory service notices cannot be suppressed.
+          </p>
+          <div className="channels-row">
+            {['push', 'email', 'sms'].map((ch) => (
+              <label key={ch} className="channel-label">
+                <input
+                  type="checkbox"
+                  checked={channels.includes(ch)}
+                  onChange={() => toggleChannel(ch)}
+                />
+                <span className="capitalize">{ch}</span>
+              </label>
+            ))}
+          </div>
+          <div className="essential-notice-badge">
+            ✓ Essential service notices always active
+          </div>
         </div>
 
         <button className="button" onClick={onViewDashboard}>

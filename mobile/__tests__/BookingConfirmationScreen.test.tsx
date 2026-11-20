@@ -30,5 +30,7 @@ describe('BookingConfirmationScreen', () => {
     expect(screen.getByText('Flight TRQ101')).toBeInTheDocument();
     expect(screen.getByText('JFK → LAX')).toBeInTheDocument();
     expect(screen.getByText('abc123def456')).toBeInTheDocument();
+    expect(screen.getByText('Itinerary Update Notification Preferences')).toBeInTheDocument();
+    expect(screen.getByText('Essential service notices always active')).toBeInTheDocument();
   });
 });
