@@ -144,6 +144,13 @@ pub trait RefundContractTrait {
         amount: i128,
         idempotency_key: Symbol,
     ) -> i128;
+    fn process_supplier_cancellation(
+        env: Env,
+        admin: Address,
+        booking_id: u64,
+        amount: i128,
+        idempotency_key: Symbol,
+    ) -> Symbol;
     fn get_total_refunded(env: Env, booking_id: u64) -> i128;
     fn is_idempotent_processed(env: Env, booking_id: u64, idempotency_key: Symbol) -> bool;
 }
@@ -403,6 +410,67 @@ impl RefundContract {
         new_total
     }
 
+    /// Process a supplier cancellation safely, preserving a pending state or settling
+    /// deterministically with idempotency validation.
+    ///
+    /// # Operational Note
+    /// When supplier cancellation responses are ambiguous or return zero amount,
+    /// the contract preserves a pending state (`pending`) rather than failing or incorrectly
+    /// finalizing. Subsequent updates can settle the refund deterministically once the
+    /// correct amount or state is confirmed.
+    pub fn process_supplier_cancellation(
+        env: Env,
+        admin: Address,
+        booking_id: u64,
+        amount: i128,
+        idempotency_key: Symbol,
+    ) -> Symbol {
+        AccessControl::require_operator(&env, &admin);
+        assert!(amount >= 0, "Invalid amount");
+
+        if RefundStorageKey::has_idempotency(&env, booking_id, &idempotency_key) {
+            return symbol_short!("settled");
+        }
+
+        if amount == 0 {
+            RefundStorageKey::set_idempotency(&env, booking_id, &idempotency_key);
+            contract_events::emit(
+                &env,
+                Domain::Refund,
+                Action::Requested,
+                (
+                    admin,
+                    env.ledger().timestamp(),
+                    booking_id,
+                    amount,
+                    symbol_short!("pending"),
+                ),
+            );
+            return symbol_short!("pending");
+        }
+
+        let current = RefundStorageKey::get_total_refunded(&env, booking_id);
+        let new_total = current + amount;
+        assert!(new_total >= current, "Overflow");
+        RefundStorageKey::set_total_refunded(&env, booking_id, new_total);
+        RefundStorageKey::set_idempotency(&env, booking_id, &idempotency_key);
+
+        contract_events::emit(
+            &env,
+            Domain::Refund,
+            Action::Approved,
+            (
+                admin,
+                env.ledger().timestamp(),
+                booking_id,
+                amount,
+                new_total,
+            ),
+        );
+
+        symbol_short!("settled")
+    }
+
     pub fn get_total_refunded(env: Env, booking_id: u64) -> i128 {
         RefundStorageKey::get_total_refunded(&env, booking_id)
     }
@@ -642,5 +710,31 @@ mod test {
         client.process_refund(&admin, &req);
         // Second process should panic (idempotency via status)
         client.process_refund(&admin, &req);
+    }
+
+    #[test]
+    fn test_supplier_cancellation_safe_and_pending() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let owner = Address::generate(&env);
+        let admin = owner.clone();
+        let (_, client) = setup_refund(&env, &owner);
+        let booking_id = 999u64;
+        let key_pending = Symbol::new(&env, "pend_key");
+        let key_settled = Symbol::new(&env, "sett_key");
+
+        // Ambiguous/zero amount preserves pending state safely
+        let status_pending = client.process_supplier_cancellation(&admin, &booking_id, &0, &key_pending);
+        assert_eq!(status_pending, Symbol::new(&env, "pending"));
+        assert!(client.is_idempotent_processed(&booking_id, &key_pending));
+
+        // Normal positive amount settles immediately
+        let status_settled = client.process_supplier_cancellation(&admin, &booking_id, &50_0000000, &key_settled);
+        assert_eq!(status_settled, Symbol::new(&env, "settled"));
+        assert_eq!(client.get_total_refunded(&booking_id), 50_0000000);
+
+        // Repeat call with settled key returns settled idempotently
+        let status_repeat = client.process_supplier_cancellation(&admin, &booking_id, &50_0000000, &key_settled);
+        assert_eq!(status_repeat, Symbol::new(&env, "settled"));
     }
 }

@@ -1,7 +1,32 @@
+use soroban_sdk::{Env, Address};
+use refund::{RefundClient, RefundStatus};
 use refund::RefundContract;
 use soroban_sdk::Symbol;
-
 use integration_tests::{generate_actors, new_env, register_contracts};
+
+#[test]
+fn test_supplier_cancellation_ambiguous_state_preservation() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let admin = Address::generate(&env);
+    let contract_id = env.register(refund::RefundContract, ());
+    let client = RefundClient::new(&env, &contract_id);
+    client.initialize(&admin);
+
+    let passenger = Address::generate(&env);
+    let refund_id = client.request_refund(&passenger, &100);
+
+    // Test ambiguous supplier cancellation preserves pending state
+    client.process_supplier_cancellation(&refund_id, &true);
+    let ref_data = client.get_refund(&refund_id);
+    assert_eq!(ref_data.status, RefundStatus::Pending);
+
+    // Process subsequently
+    client.process_refund(&refund_id);
+    let ref_data_after = client.get_refund(&refund_id);
+    assert_eq!(ref_data_after.status, RefundStatus::Processed);
+}
+
 
 #[test]
 fn test_set_policy_and_calculate_refund() {
