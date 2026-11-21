@@ -90,6 +90,24 @@ impl FlightBookingContract {
         booking_id
     }
 
+    pub fn cancel_booking(env: Env, booking_id: u64) -> Result<(), Symbol> {
+        let mut booking =
+            Self::get_booking(env.clone(), booking_id).ok_or(symbol_short!("not_found"))?;
+        booking.passenger.require_auth();
+
+        match booking.state {
+            BookingState::Confirmed => {
+                booking.state = BookingState::Pending;
+                env.storage()
+                    .persistent()
+                    .set(&DataKey::Booking(booking_id), &booking);
+                Ok(())
+            }
+            BookingState::Pending => Ok(()),
+            BookingState::Cancelled | BookingState::Refunded => Err(symbol_short!("bad_state")),
+        }
+    }
+
     pub fn get_booking(env: Env, booking_id: u64) -> Option<Booking> {
         env.storage()
             .persistent()
